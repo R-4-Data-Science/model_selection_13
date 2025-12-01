@@ -1,0 +1,33 @@
+Package: modelselection13
+Type: Package
+Title: Multi-Path Stepwise Model Selection with AIC
+Version: 0.1.0
+Authors@R: c(
+    person(
+      "Han", "Xiu",
+      email = "hzx0033@auburn.edu",
+      role = c("aut", "cre")
+    ),
+    person(
+      "Lauren", "Cooper",
+      role = c("aut")
+    ),
+    person(
+      "Fritzner", "Pierre",
+      role = c("aut")
+    )
+  )
+Description: Implements a multi-path stepwise model selection procedure using 
+    the Akaike Information Criterion (AIC). Instead of following a single 
+    forward-selection path, the method explores multiple near-optimal model 
+    sequences by retaining all children models whose AIC values are within a 
+    specified tolerance of the best model at each step. Model stability is 
+    assessed through repeated resampling (bootstrap or subsampling), recording 
+    how often each predictor appears across the model sets. The package then 
+    identifies plausible final models based on both AIC closeness and the 
+    average stability of their selected predictors. Supports linear and 
+    logistic regression.
+License: GNU General Public License
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2

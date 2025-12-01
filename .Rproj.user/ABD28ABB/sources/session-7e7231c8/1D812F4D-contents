@@ -1,0 +1,218 @@
+#' @title Resampling-based stability for multi-path forward selection
+#'
+#' @description For each resample of the data (bootstrap or subsample), run \code{build_paths()}
+#' and compute, for each predictor, the proportion of models in that resample
+#' that contain the predictor. Average these proportions across resamples to
+#' obtain a stability score \eqn{\pi_j} for each predictor \eqn{j}.
+#'
+#' @param x Matrix or data.frame of predictors (n x p).
+#' @param y Response vector of length n.
+#' @param B Integer, number of resamples (e.g., 50 or 100).
+#' @param resample Resampling type: \code{"bootstrap"} or \code{"subsample"}.
+#' @param family Model family passed to \code{build_paths}: \code{"gaussian"} or \code{"binomial"}.
+#' @param K Maximum number of forward steps for \code{build_paths}.
+#' @param eps Minimum AIC improvement for \code{build_paths}.
+#' @param delta AIC tolerance for keeping near-tie children in \code{build_paths}.
+#' @param L Maximum number of models per level in \code{build_paths}.
+#' @param m Subsample size used when \code{resample = "subsample"}.
+#'   If \code{NULL}, defaults to \code{ceiling(sqrt(n))}.
+#' @param seed Optional integer random seed for reproducibility. If \code{NULL},
+#'   the current RNG state is used.
+#'
+#' @return A list of class \code{"path_stability"} with components:
+#'   \item{pi}{Numeric vector of length p with stability scores \eqn{\pi_j} in [0, 1].}
+#'   \item{z}{B x p matrix of per-resample proportions \eqn{z_j^{(b)}}.}
+#'   \item{meta}{List with resampling and model-selection parameters.}
+#'
+#' @details
+#' For each resample \eqn{b = 1, \dots, B}:
+#' \enumerate{
+#'   \item Draw a bootstrap sample or subsample of the rows of \code{x, y}.
+#'   \item Run \code{build_paths()} on the resampled data.
+#'   \item Collect all models from the resulting forest (excluding the empty model at step 0).
+#'   \item For each predictor \eqn{j}, compute \eqn{z_j^{(b)}} as the proportion of those models
+#'         in which predictor \eqn{j} appears.
+#' }
+#' Finally, the stability scores are
+#' \deqn{\pi_j = \frac{1}{B} \sum_{b=1}^B z_j^{(b)}.}
+#'
+#' @examples
+#' \dontrun{
+#'   set.seed(1)
+#'   n <- 120; p <- 6
+#'   X <- matrix(rnorm(n * p), n, p)
+#'   colnames(X) <- paste0("x", 1:p)
+#'   y <- X[,1] * 2 - X[,2] + rnorm(n)
+#'
+#'   stab <- stability(
+#'     x = X, y = y,
+#'     B = 30,
+#'     resample = "bootstrap",
+#'     family = "gaussian",
+#'     K = min(ncol(X), 5),
+#'     eps = 1e-6, delta = 1, L = 20
+#'   )
+#'
+#'   stab$pi  # stability scores per predictor
+#' }
+#'
+#' @export
+stability <- function(x, y,
+                      B = 50,
+                      resample = c("bootstrap", "subsample"),
+                      family = c("gaussian", "binomial"),
+                      K = min(ncol(x), 10),
+                      eps = 1e-6,
+                      delta = 1,
+                      L = 50,
+                      m = NULL,
+                      seed = 28) {
+
+  ## ---- Argument checks and setup ----
+
+  resample <- match.arg(resample)
+  family   <- match.arg(family)
+
+  # Coerce x to data.frame and ensure column names
+  if (is.matrix(x)) {
+    x <- as.data.frame(x)
+  } else {
+    x <- as.data.frame(x)
+  }
+
+  if (is.null(colnames(x))) {
+    colnames(x) <- paste0("x", seq_len(ncol(x)))
+  }
+
+  n <- NROW(x)
+  p <- NCOL(x)
+
+  if (length(y) != n) {
+    stop("Length of y must match number of rows in x.")
+  }
+
+  # Default subsample size if needed
+  if (resample == "subsample" && is.null(m)) {
+    # Typical choice: m ≈ sqrt(n)
+    m <- ceiling(sqrt(n))
+  }
+
+  if (!is.null(m) && m > n) {
+    stop("Subsample size m cannot exceed n.")
+  }
+
+  # Save and optionally set RNG seed
+  if (!is.null(seed)) {
+    old_seed <- .Random.seed
+    on.exit({
+      # Restore old RNG state (best-effort)
+      if (exists("old_seed", inherits = FALSE)) {
+        .Random.seed <<- old_seed
+      }
+    }, add = TRUE)
+    set.seed(seed)
+  }
+
+  var_names <- colnames(x)
+
+  # Matrix to store per-resample proportions z_j^(b)
+  z_mat <- matrix(0, nrow = B, ncol = p)
+  colnames(z_mat) <- var_names
+
+  ## ---- Main resampling loop ----
+
+  for (b in seq_len(B)) {
+
+    # Draw resample indices
+    if (resample == "bootstrap") {
+      # Sample n rows with replacement
+      idx <- sample.int(n, size = n, replace = TRUE)
+    } else {  # "subsample"
+      # Sample m rows without replacement
+      idx <- sample.int(n, size = m, replace = FALSE)
+    }
+
+    x_b <- x[idx, , drop = FALSE]
+    y_b <- y[idx]
+
+    # Run multi-path forward selection on this resample
+    forest_b <- build_paths(
+      x      = x_b,
+      y      = y_b,
+      family = family,
+      K      = K,
+      eps    = eps,
+      delta  = delta,
+      L      = L
+    )
+
+    # Extract all models from this forest
+    mdl_df <- forest_b$aic_by_model
+
+    # We typically exclude the empty model at step 0 from the denominator,
+    # because it contains no predictors and does not contribute information
+    # about variable selection.
+    if ("step" %in% names(mdl_df)) {
+      mdl_df <- mdl_df[mdl_df$step > 0, , drop = FALSE]
+    }
+
+    # If no models beyond the intercept were produced, z^(b) is all zeros
+    if (nrow(mdl_df) == 0L) {
+      z_mat[b, ] <- 0
+      next
+    }
+
+    # mdl_df$vars is expected to be a list column of character vectors
+    model_vars_list <- mdl_df$vars
+    num_models <- length(model_vars_list)
+
+    # Initialize counts of appearances per predictor
+    counts <- integer(p)
+
+    # For each model, update counts for predictors that appear in that model
+    for (m_idx in seq_len(num_models)) {
+      vars_m <- model_vars_list[[m_idx]]
+      # Logical vector: is each predictor in vars_m?
+      present <- var_names %in% vars_m
+      counts <- counts + as.integer(present)
+    }
+
+    # Convert counts to proportions for this resample
+    z_mat[b, ] <- counts / num_models
+  }
+
+  ## ---- Aggregate across resamples to get pi ----
+
+  # Average over b = 1..B
+  pi_vec <- colMeans(z_mat, na.rm = TRUE)
+
+  # Basic sanity check: pi should lie in [0, 1]
+  if (any(pi_vec < 0 - 1e-8 | pi_vec > 1 + 1e-8, na.rm = TRUE)) {
+    warning("Some stability scores are outside [0, 1]; check z-matrix computation.")
+  }
+
+  ## ---- Assemble return object ----
+
+  meta <- list(
+    B        = B,
+    resample = resample,
+    family   = family,
+    K        = K,
+    eps      = eps,
+    delta    = delta,
+    L        = L,
+    m        = if (resample == "subsample") m else n,
+    n        = n,
+    p        = p,
+    var_names = var_names
+  )
+
+  out <- list(
+    pi   = pi_vec,
+    z    = z_mat,
+    meta = meta
+  )
+  class(out) <- "path_stability"
+
+  out
+}
