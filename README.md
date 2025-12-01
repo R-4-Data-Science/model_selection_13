@@ -5,7 +5,6 @@ R package for multi-path AIC stepwise selection, resampling-based stability, and
 ## Installation
 
 ``` r
-# install.packages("remotes") 
 remotes::install_github("R-4-Data-Science/Final_Project_13") 
 library(modelselection13)
 ```
