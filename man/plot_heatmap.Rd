@@ -15,24 +15,18 @@ plot_heatmap(
 \item{plaus}{A data.frame returned by \code{plausible_models()}, containing
 at least a list-column \code{vars} with the predictors in each model.}
 
-\item{reorder}{Logical; if \code{TRUE} (default), rows/columns are
-hierarchically clustered and reordered by similarity. If \code{FALSE},
-models are kept in their current order.}
+\item{reorder}{Logical; if \code{TRUE} (default), rows/cols are reordered
+by hierarchical clustering on (1 - similarity). If \code{FALSE}, models
+are kept in their current order.}
 
-\item{main}{Character string: title for the heatmap.}
+\item{main}{Title for the plot.}
 
-\item{...}{Additional arguments passed to \code{stats::heatmap()}.}
+\item{...}{Further arguments passed to \code{image()}.}
 }
 \value{
-Invisibly returns the Jaccard similarity matrix used for plotting.
+Invisibly returns the Jaccard similarity matrix.
 }
 \description{
-Plot a heatmap of pairwise overlaps between plausible models,
-typically obtained from \code{plausible_models()}. The overlap is measure
-using the Jaccard similarity between sets of predictors:
-\deqn{J(S_i, S_j) = |S_i \cap S_j| / |S_i \cup S_j|.}
-
-This visualization helps to see which plausible models are almost identical
-(high overlap) and which provide genuinely different combinations of
-predictors.
+Plot a heatmap of pairwise overlaps between plausible models, measured by
+Jaccard similarity between sets of predictors.
 }
