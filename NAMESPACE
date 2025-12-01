@@ -3,4 +3,6 @@
 export(build_paths)
 export(confusion_metrics)
 export(plausible_models)
+export(plot_branching)
+export(plot_heatmap)
 export(stability)
