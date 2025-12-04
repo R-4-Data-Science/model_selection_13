@@ -1,0 +1,468 @@
+---
+title: "Multi-Path Stepwise Selection with AIC: Runnable Examples"
+author: "Han Xiu, Fritzner Pierre, Lauren Cooper"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    css: my.css.final
+---
+
+# 1. Package and repository
+
+This HTML file demonstrates the main functionality of our package for the final project **“Multi-Path Stepwise Selection with AIC”**.
+
+-   **GitHub repository name** (under `R-4-Data-Science`):\
+    Package repository (final submitted package): model_selection_13\
+    Project repository (development work): Final_Project_13
+
+-   **Repository link**:\
+    Package repository: <https://github.com/R-4-Data-Science/model_selection_13>\
+    Project repository: <https://github.com/R-4-Data-Science/Final_Project_13>
+
+```{r}
+Sys.setenv(LANG = "en")
+
+# This chunk shows how to install the package from GitHub.
+remotes::install_github("R-4-Data-Science/model_selection_13")
+```
+
+```{r}
+Sys.setenv(LANG = "en")
+
+# Load the package
+library(modelselection13)
+```
+
+# 2. Overview of the workflow
+
+In this document, we show:
+
+1.  **A Gaussian (linear regression) example**:
+    -   Simulate data with a few truly important predictors
+    -   Run `build_paths()` to construct a multi-path model forest
+    -   Run `stability()` to estimate variable-level stability
+    -   Run `plausible_models()` to obtain a set of final plausible models
+2.  **A Binomial (logistic regression) example**:
+    -   Simulate binary outcome data
+    -   Run the same three functions
+    -   Use `confusion_metrics()` on a simple train/test split
+
+We also briefly justify our default choices for the main tuning parameters\
+$K, \varepsilon, \delta, L, B, \Delta, \tau$.
+
+## 2.1 Linear regression (Gaussian family)
+
+### 2.1.1 Simulate data and inspect single-variable AICs
+
+We simulate a small dataset with $n = 120$ observations and $p = 8$ predictors. Only $x_1$, $x_2$ and $x_5$ are truly important.
+
+```{r}
+set.seed(1)
+n <- 120
+p <- 8
+
+X <- matrix(rnorm(n * p), n, p)
+beta <- c(2, -1.5, 0, 0, 1, rep(0, p - 5))
+y <- as.vector(X %*% beta + rnorm(n, sd = 1))
+colnames(X) <- paste0("x", 1:p)
+
+df_lin <- data.frame(y = y, X)
+str(df_lin)
+```
+
+Before using the multi-path algorithm, we can effciently compare **single-variable** models by AIC:
+
+```{r}
+# Intercept-only model AIC
+fit_empty <- lm(y ~ 1, data = df_lin)
+aic_empty <- AIC(fit_empty)
+
+# One-variable models
+cand_lm <- lapply(seq_len(p), function(j) {
+  varname <- colnames(X)[j]
+  lm(as.formula(paste0("y ~ ", varname)), data = df_lin)
+})
+aics <- sapply(cand_lm, AIC)
+
+aic_table <- data.frame(
+  variable = colnames(X),
+  AIC      = aics
+)
+
+aic_table[order(aic_table$AIC), ][1:5, ]
+```
+
+We expect the truly important variables (`x_1`, `x_2`, `x_5`) to appear near the top.
+
+### 2.1.2 Multi-path forward selection with `build_paths()`
+
+Now we run the full multi-path forward selection on the dataset using the **Gaussian** family.
+
+Parameter choices (roughly following the project guidelines):
+
+-   $K = \min(p, 10) = 8$: maximum model size
+-   $\varepsilon = 10^{-6}$: minimal AIC improvement to expand a parent
+-   $\delta = 1$: keep children within 1 AIC of the best child per parent
+-   $L = 50$: cap on the number of models per step
+
+```{r}
+K_val    <- min(ncol(X), 10)
+eps_val  <- 1e-6
+delta_val<- 1
+L_val    <- 50
+
+forest_lin <- build_paths(
+  x      = X,
+  y      = y,
+  family = "gaussian",
+  K      = K_val,
+  eps    = eps_val,
+  delta  = delta_val,
+  L      = L_val
+)
+
+# Inspect the overall AIC table
+head(forest_lin$aic_by_model[order(forest_lin$aic_by_model$aic), ], 10)
+```
+
+We can see how many models were kept at each step:
+
+```{r}
+sapply(forest_lin$frontiers, nrow)
+```
+
+### 2.1.3 Stability estimation with `stability()`
+
+Next, we compute **resampling-based stability** using bootstrap resampling and run `build_paths()` on each bootstrap sample. For each predictor $j$, we record the proportion of models on that resample containing $j$, then average over all resamples to obtain $\pi_j$.
+
+Parameter choices:
+
+-   $B = 50$: number of resamples
+-   Resampling type: `"bootstrap"`
+
+We keep the same $K, \varepsilon, \delta, L$ as in the full-data search.
+
+```{r}
+B_val <- 50
+
+stab_lin <- stability(
+  x        = X,
+  y        = y,
+  B        = B_val,
+  resample = "bootstrap",
+  family   = "gaussian",
+  K        = K_val,
+  eps      = eps_val,
+  delta    = delta_val,
+  L        = L_val
+)
+
+stab_lin$pi
+```
+
+We expect truly important predictors (`x1`, `x2`, `x5`) to have larger stability scores.
+
+### 2.1.3 Plausible models with `plausible_models()`
+
+We combine the full-data model forest with the stability scores to identify **plausible models**.
+
+A model is considered plausible if:
+
+1.  Its AIC is within $\Delta$ of the best AIC in the forest:\
+    $\mathrm{AIC} \le \mathrm{AIC}_{\min} + \Delta$
+
+2.  Its average stability $\pi(\mathcal{S})$ exceeds a threshold $\tau$:\
+    $\pi(\mathcal{S}) = \frac{1}{|\mathcal{S}|} \sum_{j \in \mathcal{S}} \pi_j \ge \tau$
+
+Typical choices:
+
+-   $\Delta = 2$: standard AIC “equivalence” window
+-   $\tau = 0.6$: require models to be built mostly from stable predictors
+
+```{r}
+Delta_val <- 2
+tau_val   <- 0.6
+
+plaus_lin <- plausible_models(
+  forest = forest_lin,
+  pi     = stab_lin$pi,
+  Delta  = Delta_val,
+  tau    = tau_val
+)
+
+plaus_lin
+```
+
+We can inspect the variables with highest average stability across plausible models:
+
+```{r}
+if (nrow(plaus_lin) > 0) {
+  # Extract union of variables across plausible models
+  vars_all <- sort(unique(unlist(plaus_lin$vars)))
+  vars_all
+}
+```
+
+## 2.2 Logistic regression (Binomial family)
+
+Now we repeat the same workflow for a **binary outcome** with logistic regression.
+
+### 2.2.1 Simulate binary data and inspect single-variable AICs
+
+We simulate data with $n = 200$, $p = 6$, and a logistic link. Only `x_1`, `x_2`, and `x_5` have non-zero coefficients.
+
+```{r}
+set.seed(2)
+n_b <- 200
+p_b <- 6
+
+Xb <- matrix(rnorm(n_b * p_b), n_b, p_b)
+linpred <- 1.2 * Xb[, 1] - 1.0 * Xb[, 2] + 0.8 * Xb[, 5]
+prob_true <- 1 / (1 + exp(-linpred))
+ybin <- rbinom(n_b, size = 1, prob = prob_true)
+
+colnames(Xb) <- paste0("x", 1:p_b)
+df_logit <- data.frame(y = ybin, Xb)
+str(df_logit)
+```
+
+Single-variable AIC comparison:
+
+```{r}
+fit0 <- glm(y ~ 1, family = binomial(), data = df_logit)
+aic0 <- AIC(fit0)
+
+fits1 <- lapply(seq_len(p_b), function(j) {
+  varname <- colnames(Xb)[j]
+  glm(as.formula(paste0("y ~ ", varname)),
+      family = binomial(), data = df_logit)
+})
+aics1 <- sapply(fits1, AIC)
+
+aic_table_logit <- data.frame(
+  variable = colnames(Xb),
+  AIC      = aics1
+)
+
+aic_table_logit[order(aic_table_logit$AIC), ][1:5, ]
+```
+
+### 2.2.2 Multi-path forward selection for logistic regression
+
+We build the multi-path forest using the **binomial** family.
+
+```{r}
+K_logit     <- min(ncol(Xb), 10)
+eps_logit   <- 1e-6
+delta_logit <- 1
+L_logit     <- 50
+
+forest_logit <- build_paths(
+  x      = Xb,
+  y      = ybin,
+  family = "binomial",
+  K      = K_logit,
+  eps    = eps_logit,
+  delta  = delta_logit,
+  L      = L_logit
+)
+
+head(forest_logit$aic_by_model[order(forest_logit$aic_by_model$aic), ], 10)
+```
+
+### 2.2.3 Stability estimation for logistic models
+
+```{r}
+B_logit <- 50
+
+stab_logit <- stability(
+  x        = Xb,
+  y        = ybin,
+  B        = B_logit,
+  resample = "bootstrap",
+  family   = "binomial",
+  K        = K_logit,
+  eps      = eps_logit,
+  delta    = delta_logit,
+  L        = L_logit
+)
+
+stab_logit$pi
+```
+
+### 2.3.4 Plausible logistic models
+
+```{r}
+Delta_logit <- 2
+tau_logit   <- 0.6
+
+plaus_logit <- plausible_models(
+  forest = forest_logit,
+  pi     = stab_logit$pi,
+  Delta  = Delta_logit,
+  tau    = tau_logit
+)
+
+plaus_logit
+```
+
+## 2.3 Simple train/test evaluation with `confusion_metrics()`
+
+For the logistic example, we can perform a simple train/test split and evaluate performance of a single model (for example, the “best” plausible model or just a standard logistic regression).
+
+Here we fit a plain logistic regression on the full set of predictors, split the data into 70% training and 30% test, and compute confusion metrics at cutoff 0.5. If larger than or equal to 0.05, the classification is 1. If smaller than 0.05, the classification is 0.
+
+```{r}
+set.seed(28)
+n_total <- nrow(df_logit)
+train_idx <- sample.int(n_total, size = floor(0.7 * n_total))
+
+train_dat <- df_logit[train_idx, ]
+test_dat  <- df_logit[-train_idx, ]
+
+# Simple logistic model with all predictors
+fit_full <- glm(y ~ ., family = binomial(), data = train_dat)
+
+# Predicted probabilities on test set
+prob_test <- predict(fit_full, newdata = test_dat, type = "response")
+
+# Confusion matrix and metrics at cutoff 0.5
+cm <- confusion_metrics(test_dat$y, prob_test, cutoff = 0.5)
+
+cm$confusion
+cm$metrics
+```
+
+## 2.4 Parameter choices and brief justification
+
+For both the Gaussian and binomial examples, we used the following typical parameter values, following the project notes:
+
+-   $K = \min(p, 10)$: allows models up to a reasonable size without exploding the search
+-   $\varepsilon = 10^{-6}$: ensures we only expand models when there is at least a tiny AIC improvement
+-   $\delta = 1$: keeps near-ties within 1 AIC of the best child, which is a common AIC window
+-   $L = 50$: prevents the number of models per step from growing too large
+-   $B = 50$: provides a reasonable stability estimate without too much computation
+-   $\Delta = 2$: AIC tolerance for “statistically indistinguishable” models
+-   $\tau = 0.6$: requires models to be built mostly from predictors that appear frequently in resamples
+
+Together, these values give a practical compromise between **exploration** (multiple near-best paths) and **stability** (resampling-based proportions).
+
+# 3. Overlap heatmap and branching structure
+
+The project description suggests two optional extras:\
+(1) an **overlap heatmap of plausible models**\
+(2) a **helper to visualize branching by step**
+
+In this section, We use package functions `plot_heatmap()` and `plot_branching()` to illustrate both on the simulated Gaussian example.
+
+```{r}
+## ------------------------------------------------------------
+## 1. Simulate a small linear regression dataset
+## ------------------------------------------------------------
+
+set.seed(28)
+
+n <- 150   # number of observations
+p <- 7     # number of predictors
+
+# Design matrix
+X <- matrix(rnorm(n * p), n, p)
+colnames(X) <- paste0("x", 1:p)
+
+# True coefficients: only x1, x3, x5 matter
+beta_true <- c(2.0, 0, -1.5, 0, 1.2, rep(0, p - 5))
+
+# Generate response with Gaussian noise
+y <- as.vector(X %*% beta_true + rnorm(n, sd = 1))
+
+## ------------------------------------------------------------
+## 2. Run multi-path forward selection on this dataset
+## ------------------------------------------------------------
+
+K_val     <- min(p, 10)  # maximum model size
+eps_val   <- 1e-6        # minimum AIC improvement
+delta_val <- 1           # AIC tolerance for near-ties
+L_val     <- 40          # max models per step
+
+forest <- build_paths(
+  x      = X,
+  y      = y,
+  family = "gaussian",
+  K      = K_val,
+  eps    = eps_val,
+  delta  = delta_val,
+  L      = L_val
+)
+
+# Quick check: number of models per step
+sapply(forest$frontiers, nrow)
+
+## ------------------------------------------------------------
+## 3. Compute stability on resamples
+## ------------------------------------------------------------
+
+B_val <- 40  # number of resamples
+
+stab <- stability(
+  x        = X,
+  y        = y,
+  B        = B_val,
+  resample = "bootstrap",
+  family   = "gaussian",
+  K        = K_val,
+  eps      = eps_val,
+  delta    = delta_val,
+  L        = L_val
+)
+
+stab$pi  # stability scores per predictor
+
+## ------------------------------------------------------------
+## 4. Get plausible models from forest + stability
+## ------------------------------------------------------------
+
+Delta_val <- 4    # AIC tolerance for plausibility
+tau_val   <- 0.5  # minimum average stability
+
+plaus <- plausible_models(
+  forest = forest,
+  pi     = stab$pi,
+  Delta  = Delta_val,
+  tau    = tau_val
+)
+
+cat("Number of plausible models:", nrow(plaus), "\n")
+plaus
+
+
+## ------------------------------------------------------------
+## 5. Test plot_heatmap() on the plausible model set
+## ------------------------------------------------------------
+
+# This will draw a Jaccard-overlap heatmap between plausible models
+if (nrow(plaus) >= 2) {
+  jac_mat <- plot_heatmap(
+    plaus,
+    reorder = TRUE,
+    main = "Overlap Heatmap (Simulated Data)"
+  )
+  print(jac_mat)
+} else {
+  message("Still not enough plausible models (need >= 2). ",
+          "Try increasing Delta or decreasing tau further.")
+}
+
+## ------------------------------------------------------------
+## 6. Test plot_branching() on the path forest
+## ------------------------------------------------------------
+
+# This will draw the branching structure across steps
+plot_branching(
+  forest,
+  vertex_size  = 22,
+  vertex_color = "skyblue",
+  edge_color   = "gray40",
+  label_cex    = 0.6
+)
+
+```
