@@ -1,0 +1,205 @@
+---
+title: "Multi-Path AIC: Diabetes Progression"
+author: "Han Xiu, Lauren Cooper, Fritzner Pierre"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Diabetes progression (multi-path AIC)}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+# 1. Setup
+
+We begin by loading the required packages.\
+The functions `build_paths()`, `stability()`, and `plausible_models()` come from the package developed for this project.
+
+The diabetes progression dataset (`efron2004`) is available in the **care** package, which we load as well.
+
+```{r setup, message = FALSE}
+library(modelselection13)
+library(care)
+
+set.seed(28)
+```
+
+# 2. Data preparation
+
+We use the diabetes progression dataset from Efron et al. (2004), available in the `care` package.\
+The dataset contains 442 patients with 10 baseline predictors (age, sex, BMI, mean arterial pressure, and six serum measures).
+
+To illustrate model complexity and allow the multi-path search to explore richer model spaces,\
+we follow the assignment instructions and augment the baseline predictors with second-order terms:\
+- quadratic terms for each baseline variable,\
+- all pairwise interactions.
+
+This produces approximately 60 predictors in total.\
+We then create a 70/30 train–test split that will be used for model selection and evaluation throughout the vignette.
+
+```{r data-prep}
+# Load the diabetes progression data from the 'care' package
+data("efron2004", package = "care")
+
+# Convert to a plain numeric matrix (remove AsIs)
+X_base_mat <- as.matrix(unclass(efron2004$x))
+dim(X_base_mat) 
+
+# Convert to data.frame
+X_base <- as.data.frame(X_base_mat)
+dim(X_base) 
+
+y <- as.numeric(efron2004$y[, 1])
+
+# ---- Build second-order terms: quadratics + pairwise interactions ----
+
+# Quadratic terms: x_j^2 for each baseline predictor
+X_quad <- X_base^2
+colnames(X_quad) <- paste0(colnames(X_base), "_sq")
+
+# Pairwise interactions: x_j * x_k for j < k
+p <- ncol(X_base)
+interaction_list <- vector("list", length = p * (p - 1) / 2)
+interaction_names <- character(length(interaction_list))
+
+idx <- 1L
+for (j in seq_len(p - 1L)) {
+  for (k in (j + 1L):p) {
+    interaction_list[[idx]] <- X_base[[j]] * X_base[[k]]
+    interaction_names[idx] <- paste0(colnames(X_base)[j], ":", colnames(X_base)[k])
+    idx <- idx + 1L
+  }
+}
+X_int <- as.data.frame(interaction_list)
+colnames(X_int) <- interaction_names
+
+# Combine all predictors: main effects + quadratics + interactions
+X_full <- cbind(X_base, X_quad, X_int)
+
+dim(X_full)
+
+# ---- Train/test split (e.g., 70/30) ----
+
+n <- nrow(X_full)
+train_prop <- 0.7
+n_train <- floor(train_prop * n)
+
+set.seed(2025)  # reproducible split
+train_idx <- sample(seq_len(n), size = n_train, replace = FALSE)
+
+X_train <- X_full[train_idx, , drop = FALSE]
+y_train <- y[train_idx]
+
+X_test  <- X_full[-train_idx, , drop = FALSE]
+y_test  <- y[-train_idx]
+
+# Quick sanity checks
+dim(X_train)
+dim(X_test)
+length(y_train)
+length(y_test)
+```
+
+# 3. Multi-path forward selection using AIC
+
+To explore the model space efficiently, we apply our **multi-path forward selection algorithm** to the training data.\
+Unlike traditional forward selection, which commits to a single best variable at each step, multi-path search allows **near-optimal alternatives** (within a small AIC tolerance) to remain active.\
+This produces a **forest** of plausible model trajectories, capturing competing explanations that fit the data almost equally well.
+
+Using the training predictors $X_{\text{train}}$ and response $y_{\text{train}}$, we run `build_paths()` with:
+
+-   $K = 10$: maximum model size\
+-   $\varepsilon = 10^{-6}$: minimum AIC improvement required to expand a model\
+-   $\Delta = 2$: AIC near-tie tolerance\
+-   $L = 30$: maximum number of models retained per step
+
+The result is a structured collection of models at each forward-selection step, which we will later analyze for stability.
+
+```{r build-paths, message=FALSE}
+# Multi-path AIC forward selection on the training set
+set.seed(28)
+
+K_val <- 10     # max number of variables to include
+eps_val <- 1e-6 # minimum AIC improvement
+delta_val <- 2  # allow small AIC near-ties
+L_val <- 30     # limit models per step
+
+paths <- build_paths(
+  x = X_train,
+  y = y_train,
+  family = "gaussian",
+  K = K_val,
+  eps = eps_val,
+  delta = delta_val,
+  L = L_val
+)
+
+paths$meta
+length(paths$frontiers)          # number of steps+1
+paths$frontiers[[1]]             # step 0: empty model
+paths$frontiers[[2]][1:5, ]      # first few models at step 1
+```
+
+# 4. Stability analysis via resampling
+
+To assess how reliably each predictor enters the model across perturbed versions of the data, we perform a **bootstrap-based stability analysis**.
+
+For each bootstrap resample of the training set:
+
+1.  `build_paths()` is rerun on the resampled data.\
+2.  For every predictor $j$, we record the proportion of discovered models in which $j$ appears.\
+3.  These proportions are averaged over $B = 50$ resamples to obtain a stability score\
+    $\pi_j \in [0, 1]$.
+
+Predictors with high $\pi_j$ are consistently selected across resamplings, while those with low stability tend to enter models only sporadically.\
+The stability vector $\pi$ will guide our selection of a final set of plausible models.
+
+```{r stability, message=FALSE}
+set.seed(28)
+
+stab <- stability(
+  x = X_train,
+  y = y_train,
+  B = 50,
+  resample = "bootstrap",
+  family = "gaussian",
+  K = K_val,     
+  eps = eps_val,
+  delta = delta_val,
+  L = L_val
+)
+
+# Show first few stability scores
+head(stab$pi)
+summary(stab$pi)
+```
+
+# 5. Constructing the plausible model set
+
+To balance statistical fit and model robustness, we combine the AIC results from the multi-path search with the stability scores $\pi_j$ obtained from the bootstrap analysis.
+
+We select two tuning parameters:
+
+-   **AIC tolerance** $\Delta = 2$:\
+    We use an AIC tolerance of $\Delta = 2$, since models within 2 AIC units are generally considered statistically indistinguishable.
+
+-   **Stability threshold** $\tau = 0.4$:\
+    We set the stability threshold to $\tau = 0.4$, retaining only models built from predictors that appear consistently across bootstrap resamples.
+
+We optionally remove near-duplicate models using Jaccard similarity to avoid redundancy.
+
+The resulting plausible model set provides a principled balance between predictive fit and structural stability.
+
+```{r plausible-models}
+Delta_val <- 2        # AIC window
+tau_val <- 0.4       # stability threshold
+
+plaus <- plausible_models(
+  forest = paths,
+  pi = stab$pi,
+  Delta = Delta_val,
+  tau = tau_val,
+  jaccard_threshold = 0.8
+)
+
+plaus
+```

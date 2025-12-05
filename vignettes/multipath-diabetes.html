@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Han Xiu, Lauren Cooper, Fritzner Pierre" />
+
+<meta name="date" content="2025-12-05" />
+
+<title>Multi-Path AIC: Diabetes Progression</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Multi-Path AIC: Diabetes Progression</h1>
+<h4 class="author">Han Xiu, Lauren Cooper, Fritzner Pierre</h4>
+<h4 class="date">2025-12-05</h4>
+
+
+
+<div id="setup" class="section level1">
+<h1>1. Setup</h1>
+<p>We begin by loading the required packages.<br />
+The functions <code>build_paths()</code>, <code>stability()</code>, and
+<code>plausible_models()</code> come from the package developed for this
+project.</p>
+<p>The diabetes progression dataset (<code>efron2004</code>) is
+available in the <strong>care</strong> package, which we load as
+well.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(modelselection13)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(care)</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">28</span>)</span></code></pre></div>
+</div>
+<div id="data-preparation" class="section level1">
+<h1>2. Data preparation</h1>
+<p>We use the diabetes progression dataset from Efron et al. (2004),
+available in the <code>care</code> package.<br />
+The dataset contains 442 patients with 10 baseline predictors (age, sex,
+BMI, mean arterial pressure, and six serum measures).</p>
+<p>To illustrate model complexity and allow the multi-path search to
+explore richer model spaces,<br />
+we follow the assignment instructions and augment the baseline
+predictors with second-order terms:<br />
+- quadratic terms for each baseline variable,<br />
+- all pairwise interactions.</p>
+<p>This produces approximately 60 predictors in total.<br />
+We then create a 70/30 train–test split that will be used for model
+selection and evaluation throughout the vignette.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="co"># Load the diabetes progression data from the &#39;care&#39; package</span></span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">data</span>(<span class="st">&quot;efron2004&quot;</span>, <span class="at">package =</span> <span class="st">&quot;care&quot;</span>)</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co"># Convert to a plain numeric matrix (remove AsIs)</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>X_base_mat <span class="ot">&lt;-</span> <span class="fu">as.matrix</span>(<span class="fu">unclass</span>(efron2004<span class="sc">$</span>x))</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="fu">dim</span>(X_base_mat) </span></code></pre></div>
+<pre><code>## [1] 442  10</code></pre>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="co"># Convert to data.frame</span></span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>X_base <span class="ot">&lt;-</span> <span class="fu">as.data.frame</span>(X_base_mat)</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="fu">dim</span>(X_base) </span></code></pre></div>
+<pre><code>## [1] 442  10</code></pre>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(efron2004<span class="sc">$</span>y[, <span class="dv">1</span>])</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co"># ---- Build second-order terms: quadratics + pairwise interactions ----</span></span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co"># Quadratic terms: x_j^2 for each baseline predictor</span></span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>X_quad <span class="ot">&lt;-</span> X_base<span class="sc">^</span><span class="dv">2</span></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="fu">colnames</span>(X_quad) <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="fu">colnames</span>(X_base), <span class="st">&quot;_sq&quot;</span>)</span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co"># Pairwise interactions: x_j * x_k for j &lt; k</span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>p <span class="ot">&lt;-</span> <span class="fu">ncol</span>(X_base)</span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>interaction_list <span class="ot">&lt;-</span> <span class="fu">vector</span>(<span class="st">&quot;list&quot;</span>, <span class="at">length =</span> p <span class="sc">*</span> (p <span class="sc">-</span> <span class="dv">1</span>) <span class="sc">/</span> <span class="dv">2</span>)</span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>interaction_names <span class="ot">&lt;-</span> <span class="fu">character</span>(<span class="fu">length</span>(interaction_list))</span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a></span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a>idx <span class="ot">&lt;-</span> <span class="dv">1</span><span class="dt">L</span></span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="cf">for</span> (j <span class="cf">in</span> <span class="fu">seq_len</span>(p <span class="sc">-</span> <span class="dv">1</span><span class="dt">L</span>)) {</span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a>  <span class="cf">for</span> (k <span class="cf">in</span> (j <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span>)<span class="sc">:</span>p) {</span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a>    interaction_list[[idx]] <span class="ot">&lt;-</span> X_base[[j]] <span class="sc">*</span> X_base[[k]]</span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a>    interaction_names[idx] <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="fu">colnames</span>(X_base)[j], <span class="st">&quot;:&quot;</span>, <span class="fu">colnames</span>(X_base)[k])</span>
+<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a>    idx <span class="ot">&lt;-</span> idx <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span></span>
+<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a>  }</span>
+<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a>}</span>
+<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a>X_int <span class="ot">&lt;-</span> <span class="fu">as.data.frame</span>(interaction_list)</span>
+<span id="cb6-23"><a href="#cb6-23" tabindex="-1"></a><span class="fu">colnames</span>(X_int) <span class="ot">&lt;-</span> interaction_names</span>
+<span id="cb6-24"><a href="#cb6-24" tabindex="-1"></a></span>
+<span id="cb6-25"><a href="#cb6-25" tabindex="-1"></a><span class="co"># Combine all predictors: main effects + quadratics + interactions</span></span>
+<span id="cb6-26"><a href="#cb6-26" tabindex="-1"></a>X_full <span class="ot">&lt;-</span> <span class="fu">cbind</span>(X_base, X_quad, X_int)</span>
+<span id="cb6-27"><a href="#cb6-27" tabindex="-1"></a></span>
+<span id="cb6-28"><a href="#cb6-28" tabindex="-1"></a><span class="fu">dim</span>(X_full)</span></code></pre></div>
+<pre><code>## [1] 442  65</code></pre>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="co"># ---- Train/test split (e.g., 70/30) ----</span></span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>n <span class="ot">&lt;-</span> <span class="fu">nrow</span>(X_full)</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>train_prop <span class="ot">&lt;-</span> <span class="fl">0.7</span></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>n_train <span class="ot">&lt;-</span> <span class="fu">floor</span>(train_prop <span class="sc">*</span> n)</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">2025</span>)  <span class="co"># reproducible split</span></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>train_idx <span class="ot">&lt;-</span> <span class="fu">sample</span>(<span class="fu">seq_len</span>(n), <span class="at">size =</span> n_train, <span class="at">replace =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a></span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a>X_train <span class="ot">&lt;-</span> X_full[train_idx, , drop <span class="ot">=</span> <span class="cn">FALSE</span>]</span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>y_train <span class="ot">&lt;-</span> y[train_idx]</span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a></span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a>X_test  <span class="ot">&lt;-</span> X_full[<span class="sc">-</span>train_idx, , drop <span class="ot">=</span> <span class="cn">FALSE</span>]</span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a>y_test  <span class="ot">&lt;-</span> y[<span class="sc">-</span>train_idx]</span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a></span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a><span class="co"># Quick sanity checks</span></span>
+<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a><span class="fu">dim</span>(X_train)</span></code></pre></div>
+<pre><code>## [1] 309  65</code></pre>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">dim</span>(X_test)</span></code></pre></div>
+<pre><code>## [1] 133  65</code></pre>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">length</span>(y_train)</span></code></pre></div>
+<pre><code>## [1] 309</code></pre>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="fu">length</span>(y_test)</span></code></pre></div>
+<pre><code>## [1] 133</code></pre>
+</div>
+<div id="multi-path-forward-selection-using-aic" class="section level1">
+<h1>3. Multi-path forward selection using AIC</h1>
+<p>To explore the model space efficiently, we apply our
+<strong>multi-path forward selection algorithm</strong> to the training
+data.<br />
+Unlike traditional forward selection, which commits to a single best
+variable at each step, multi-path search allows <strong>near-optimal
+alternatives</strong> (within a small AIC tolerance) to remain
+active.<br />
+This produces a <strong>forest</strong> of plausible model trajectories,
+capturing competing explanations that fit the data almost equally
+well.</p>
+<p>Using the training predictors <span class="math inline">\(X_{\text{train}}\)</span> and response <span class="math inline">\(y_{\text{train}}\)</span>, we run
+<code>build_paths()</code> with:</p>
+<ul>
+<li><span class="math inline">\(K = 10\)</span>: maximum model
+size<br />
+</li>
+<li><span class="math inline">\(\varepsilon = 10^{-6}\)</span>: minimum
+AIC improvement required to expand a model<br />
+</li>
+<li><span class="math inline">\(\Delta = 2\)</span>: AIC near-tie
+tolerance<br />
+</li>
+<li><span class="math inline">\(L = 30\)</span>: maximum number of
+models retained per step</li>
+</ul>
+<p>The result is a structured collection of models at each
+forward-selection step, which we will later analyze for stability.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="co"># Multi-path AIC forward selection on the training set</span></span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">28</span>)</span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a></span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a>K_val <span class="ot">&lt;-</span> <span class="dv">10</span>     <span class="co"># max number of variables to include</span></span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a>eps_val <span class="ot">&lt;-</span> <span class="fl">1e-6</span> <span class="co"># minimum AIC improvement</span></span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a>delta_val <span class="ot">&lt;-</span> <span class="dv">2</span>  <span class="co"># allow small AIC near-ties</span></span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a>L_val <span class="ot">&lt;-</span> <span class="dv">30</span>     <span class="co"># limit models per step</span></span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a>paths <span class="ot">&lt;-</span> <span class="fu">build_paths</span>(</span>
+<span id="cb16-10"><a href="#cb16-10" tabindex="-1"></a>  <span class="at">x =</span> X_train,</span>
+<span id="cb16-11"><a href="#cb16-11" tabindex="-1"></a>  <span class="at">y =</span> y_train,</span>
+<span id="cb16-12"><a href="#cb16-12" tabindex="-1"></a>  <span class="at">family =</span> <span class="st">&quot;gaussian&quot;</span>,</span>
+<span id="cb16-13"><a href="#cb16-13" tabindex="-1"></a>  <span class="at">K =</span> K_val,</span>
+<span id="cb16-14"><a href="#cb16-14" tabindex="-1"></a>  <span class="at">eps =</span> eps_val,</span>
+<span id="cb16-15"><a href="#cb16-15" tabindex="-1"></a>  <span class="at">delta =</span> delta_val,</span>
+<span id="cb16-16"><a href="#cb16-16" tabindex="-1"></a>  <span class="at">L =</span> L_val</span>
+<span id="cb16-17"><a href="#cb16-17" tabindex="-1"></a>)</span>
+<span id="cb16-18"><a href="#cb16-18" tabindex="-1"></a></span>
+<span id="cb16-19"><a href="#cb16-19" tabindex="-1"></a>paths<span class="sc">$</span>meta</span></code></pre></div>
+<pre><code>## $family
+## [1] &quot;gaussian&quot;
+## 
+## $K
+## [1] 10
+## 
+## $eps
+## [1] 1e-06
+## 
+## $delta
+## [1] 2
+## 
+## $L
+## [1] 30
+## 
+## $n
+## [1] 309
+## 
+## $p
+## [1] 65
+## 
+## $var_names
+##  [1] &quot;age&quot;     &quot;sex&quot;     &quot;bmi&quot;     &quot;bp&quot;      &quot;s1&quot;      &quot;s2&quot;      &quot;s3&quot;     
+##  [8] &quot;s4&quot;      &quot;s5&quot;      &quot;s6&quot;      &quot;age_sq&quot;  &quot;sex_sq&quot;  &quot;bmi_sq&quot;  &quot;bp_sq&quot;  
+## [15] &quot;s1_sq&quot;   &quot;s2_sq&quot;   &quot;s3_sq&quot;   &quot;s4_sq&quot;   &quot;s5_sq&quot;   &quot;s6_sq&quot;   &quot;age:sex&quot;
+## [22] &quot;age:bmi&quot; &quot;age:bp&quot;  &quot;age:s1&quot;  &quot;age:s2&quot;  &quot;age:s3&quot;  &quot;age:s4&quot;  &quot;age:s5&quot; 
+## [29] &quot;age:s6&quot;  &quot;sex:bmi&quot; &quot;sex:bp&quot;  &quot;sex:s1&quot;  &quot;sex:s2&quot;  &quot;sex:s3&quot;  &quot;sex:s4&quot; 
+## [36] &quot;sex:s5&quot;  &quot;sex:s6&quot;  &quot;bmi:bp&quot;  &quot;bmi:s1&quot;  &quot;bmi:s2&quot;  &quot;bmi:s3&quot;  &quot;bmi:s4&quot; 
+## [43] &quot;bmi:s5&quot;  &quot;bmi:s6&quot;  &quot;bp:s1&quot;   &quot;bp:s2&quot;   &quot;bp:s3&quot;   &quot;bp:s4&quot;   &quot;bp:s5&quot;  
+## [50] &quot;bp:s6&quot;   &quot;s1:s2&quot;   &quot;s1:s3&quot;   &quot;s1:s4&quot;   &quot;s1:s5&quot;   &quot;s1:s6&quot;   &quot;s2:s3&quot;  
+## [57] &quot;s2:s4&quot;   &quot;s2:s5&quot;   &quot;s2:s6&quot;   &quot;s3:s4&quot;   &quot;s3:s5&quot;   &quot;s3:s6&quot;   &quot;s4:s5&quot;  
+## [64] &quot;s4:s6&quot;   &quot;s5:s6&quot;</code></pre>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="fu">length</span>(paths<span class="sc">$</span>frontiers)          <span class="co"># number of steps+1</span></span></code></pre></div>
+<pre><code>## [1] 11</code></pre>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a>paths<span class="sc">$</span>frontiers[[<span class="dv">1</span>]]             <span class="co"># step 0: empty model</span></span></code></pre></div>
+<pre><code>##   step model_id     key     aic size parent vars
+## 1    0        1 &lt;empty&gt; 868.916    0   &lt;NA&gt;</code></pre>
+<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" tabindex="-1"></a>paths<span class="sc">$</span>frontiers[[<span class="dv">2</span>]][<span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>, ]      <span class="co"># first few models at step 1</span></span></code></pre></div>
+<pre><code>##      step model_id  key      aic size  parent vars
+## 1       1        1  bmi 746.4283    1 &lt;empty&gt;  bmi
+## 2       1        2   s5 747.8202    1 &lt;empty&gt;   s5
+## NA     NA       NA &lt;NA&gt;       NA   NA    &lt;NA&gt;     
+## NA.1   NA       NA &lt;NA&gt;       NA   NA    &lt;NA&gt;     
+## NA.2   NA       NA &lt;NA&gt;       NA   NA    &lt;NA&gt;</code></pre>
+</div>
+<div id="stability-analysis-via-resampling" class="section level1">
+<h1>4. Stability analysis via resampling</h1>
+<p>To assess how reliably each predictor enters the model across
+perturbed versions of the data, we perform a <strong>bootstrap-based
+stability analysis</strong>.</p>
+<p>For each bootstrap resample of the training set:</p>
+<ol style="list-style-type: decimal">
+<li><code>build_paths()</code> is rerun on the resampled data.<br />
+</li>
+<li>For every predictor <span class="math inline">\(j\)</span>, we
+record the proportion of discovered models in which <span class="math inline">\(j\)</span> appears.<br />
+</li>
+<li>These proportions are averaged over <span class="math inline">\(B =
+50\)</span> resamples to obtain a stability score<br />
+<span class="math inline">\(\pi_j \in [0, 1]\)</span>.</li>
+</ol>
+<p>Predictors with high <span class="math inline">\(\pi_j\)</span> are
+consistently selected across resamplings, while those with low stability
+tend to enter models only sporadically.<br />
+The stability vector <span class="math inline">\(\pi\)</span> will guide
+our selection of a final set of plausible models.</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">28</span>)</span>
+<span id="cb24-2"><a href="#cb24-2" tabindex="-1"></a></span>
+<span id="cb24-3"><a href="#cb24-3" tabindex="-1"></a>stab <span class="ot">&lt;-</span> <span class="fu">stability</span>(</span>
+<span id="cb24-4"><a href="#cb24-4" tabindex="-1"></a>  <span class="at">x =</span> X_train,</span>
+<span id="cb24-5"><a href="#cb24-5" tabindex="-1"></a>  <span class="at">y =</span> y_train,</span>
+<span id="cb24-6"><a href="#cb24-6" tabindex="-1"></a>  <span class="at">B =</span> <span class="dv">50</span>,</span>
+<span id="cb24-7"><a href="#cb24-7" tabindex="-1"></a>  <span class="at">resample =</span> <span class="st">&quot;bootstrap&quot;</span>,</span>
+<span id="cb24-8"><a href="#cb24-8" tabindex="-1"></a>  <span class="at">family =</span> <span class="st">&quot;gaussian&quot;</span>,</span>
+<span id="cb24-9"><a href="#cb24-9" tabindex="-1"></a>  <span class="at">K =</span> K_val,     </span>
+<span id="cb24-10"><a href="#cb24-10" tabindex="-1"></a>  <span class="at">eps =</span> eps_val,</span>
+<span id="cb24-11"><a href="#cb24-11" tabindex="-1"></a>  <span class="at">delta =</span> delta_val,</span>
+<span id="cb24-12"><a href="#cb24-12" tabindex="-1"></a>  <span class="at">L =</span> L_val</span>
+<span id="cb24-13"><a href="#cb24-13" tabindex="-1"></a>)</span>
+<span id="cb24-14"><a href="#cb24-14" tabindex="-1"></a></span>
+<span id="cb24-15"><a href="#cb24-15" tabindex="-1"></a><span class="co"># Show first few stability scores</span></span>
+<span id="cb24-16"><a href="#cb24-16" tabindex="-1"></a><span class="fu">head</span>(stab<span class="sc">$</span>pi)</span></code></pre></div>
+<pre><code>##        age        sex        bmi         bp         s1         s2 
+## 0.04105597 0.34810925 0.99461210 0.74859087 0.11206644 0.04052615</code></pre>
+<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" tabindex="-1"></a><span class="fu">summary</span>(stab<span class="sc">$</span>pi)</span></code></pre></div>
+<pre><code>##     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+## 0.004864 0.029058 0.047763 0.123398 0.112066 0.995914</code></pre>
+</div>
+<div id="constructing-the-plausible-model-set" class="section level1">
+<h1>5. Constructing the plausible model set</h1>
+<p>To balance statistical fit and model robustness, we combine the AIC
+results from the multi-path search with the stability scores <span class="math inline">\(\pi_j\)</span> obtained from the bootstrap
+analysis.</p>
+<p>We select two tuning parameters:</p>
+<ul>
+<li><p><strong>AIC tolerance</strong> <span class="math inline">\(\Delta
+= 2\)</span>:<br />
+We use an AIC tolerance of <span class="math inline">\(\Delta =
+2\)</span>, since models within 2 AIC units are generally considered
+statistically indistinguishable.</p></li>
+<li><p><strong>Stability threshold</strong> <span class="math inline">\(\tau = 0.4\)</span>:<br />
+We set the stability threshold to <span class="math inline">\(\tau =
+0.4\)</span>, retaining only models built from predictors that appear
+consistently across bootstrap resamples.</p></li>
+</ul>
+<p>We optionally remove near-duplicate models using Jaccard similarity
+to avoid redundancy.</p>
+<p>The resulting plausible model set provides a principled balance
+between predictive fit and structural stability.</p>
+<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" tabindex="-1"></a>Delta_val <span class="ot">&lt;-</span> <span class="dv">2</span>        <span class="co"># AIC window</span></span>
+<span id="cb28-2"><a href="#cb28-2" tabindex="-1"></a>tau_val <span class="ot">&lt;-</span> <span class="fl">0.4</span>       <span class="co"># stability threshold</span></span>
+<span id="cb28-3"><a href="#cb28-3" tabindex="-1"></a></span>
+<span id="cb28-4"><a href="#cb28-4" tabindex="-1"></a>plaus <span class="ot">&lt;-</span> <span class="fu">plausible_models</span>(</span>
+<span id="cb28-5"><a href="#cb28-5" tabindex="-1"></a>  <span class="at">forest =</span> paths,</span>
+<span id="cb28-6"><a href="#cb28-6" tabindex="-1"></a>  <span class="at">pi =</span> stab<span class="sc">$</span>pi,</span>
+<span id="cb28-7"><a href="#cb28-7" tabindex="-1"></a>  <span class="at">Delta =</span> Delta_val,</span>
+<span id="cb28-8"><a href="#cb28-8" tabindex="-1"></a>  <span class="at">tau =</span> tau_val,</span>
+<span id="cb28-9"><a href="#cb28-9" tabindex="-1"></a>  <span class="at">jaccard_threshold =</span> <span class="fl">0.8</span></span>
+<span id="cb28-10"><a href="#cb28-10" tabindex="-1"></a>)</span>
+<span id="cb28-11"><a href="#cb28-11" tabindex="-1"></a></span>
+<span id="cb28-12"><a href="#cb28-12" tabindex="-1"></a>plaus</span></code></pre></div>
+<pre><code>##     model_id
+## 83         1
+## 84         2
+## 86         3
+## 89         4
+## 91         5
+## 92         6
+## 95         7
+## 98         8
+## 102        9
+##                                                                         key
+## 83      age:sex + bmi + bmi:bp + bp + s1:s5 + s2:s5 + s3 + s5 + s5:s6 + sex
+## 84      age:sex + bmi + bmi:bp + bp + s1:s4 + s2:s5 + s3 + s5 + s6_sq + sex
+## 86     age:s5 + age:sex + bmi + bmi:bp + bp + s3 + s5 + s5:s6 + s5_sq + sex
+## 89   age:sex + bmi + bmi:bp + bp + s1:s4 + s2:s5 + s3 + s4:s6 + s5 + sex_sq
+## 91   age:sex + bmi + bmi:bp + bp + s1:s5 + s2:s5 + s3 + s5 + s6_sq + sex_sq
+## 92   age:sex + bmi + bmi:bp + bp + s2:s5 + s3 + s5 + s5:s6 + s5_sq + sex_sq
+## 95  age:s5 + age:sex + bmi + bmi:bp + bp + s3 + s5 + s5_sq + s6_sq + sex_sq
+## 98      age:sex + bmi + bmi:s6 + bp + bp:s5 + s2:s5 + s3 + s5 + s5_sq + sex
+## 102 age:s5 + age:sex + bmi + bmi:s6 + bp + bp:s5 + s3 + s5 + s5_sq + sex_sq
+##     step size      aic mean_stability         vars
+## 83    10   10 644.7878      0.4400990 age:sex,....
+## 84    10   10 644.8178      0.4523190 age:sex,....
+## 86    10   10 645.1862      0.4700439 age:s5, ....
+## 89    10   10 645.2796      0.4462771 age:sex,....
+## 91    10   10 645.4239      0.4500792 age:sex,....
+## 92    10   10 645.5218      0.4572623 age:sex,....
+## 95    10   10 645.9620      0.4800241 age:s5, ....
+## 98    10   10 646.0359      0.4408154 age:sex,....
+## 102   10   10 646.0418      0.4528797 age:s5, ....
+##                                                              parent
+## 83      age:sex + bmi + bmi:bp + bp + s1:s5 + s2:s5 + s3 + s5 + sex
+## 84      age:sex + bmi + bmi:bp + bp + s2:s5 + s3 + s5 + s6_sq + sex
+## 86      age:sex + bmi + bmi:bp + bp + s3 + s5 + s5:s6 + s5_sq + sex
+## 89   age:sex + bmi + bmi:bp + bp + s1:s4 + s2:s5 + s3 + s5 + sex_sq
+## 91   age:sex + bmi + bmi:bp + bp + s2:s5 + s3 + s5 + s6_sq + sex_sq
+## 92   age:sex + bmi + bmi:bp + bp + s3 + s5 + s5:s6 + s5_sq + sex_sq
+## 95  age:s5 + age:sex + bmi + bmi:bp + bp + s3 + s5 + s6_sq + sex_sq
+## 98      age:sex + bmi + bmi:s6 + bp + bp:s5 + s3 + s5 + s5_sq + sex
+## 102  age:sex + bmi + bmi:s6 + bp + bp:s5 + s3 + s5 + s5_sq + sex_sq</code></pre>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
